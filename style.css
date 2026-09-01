@@ -243,8 +243,8 @@ body {
 .btn-full { width: 100%; }
 .btn-flex { flex: 1; }
 .btn-large { width: 100%; }
-
 .btn-icon-only { padding: 13px; }
+.btn-icon-wrapper { display: inline-flex; align-items: center; justify-content: center; }
 
 .btn-icon {
     background: rgba(255, 255, 255, 0.08);
@@ -560,10 +560,77 @@ body {
     100% { opacity: 0; transform: translateY(-200px) scale(0.8); }
 }
 
-/* Controls & Hidden Utilities */
+/* Controls & Host Invite Bar */
 .controls {
     display: flex;
+    flex-direction: column;
     gap: 8px;
+    width: 100%;
+}
+
+.host-invite-bar {
+    display: flex;
+    gap: 8px;
+    width: 100%;
+    justify-content: flex-start;
+    align-items: center;
+}
+
+.host-invite-bar.hidden { display: none !important; }
+
+.code-peek-group {
+    display: inline-flex;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.28);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: var(--radius-md);
+    padding: 3px 6px;
+    transition: var(--transition);
+}
+
+.code-peek-group:hover,
+.code-peek-group:focus-within {
+    border-color: rgba(255, 255, 255, 0.22);
+    background: rgba(0, 0, 0, 0.38);
+}
+
+.code-peek-input {
+    width: 105px;
+    background: transparent;
+    border: none;
+    outline: none;
+    padding: 4px 6px;
+    font-family: var(--font-head);
+    font-weight: 700;
+    font-size: 0.95rem;
+    letter-spacing: 2px;
+    color: var(--text-primary);
+    text-transform: uppercase;
+    text-align: left;
+    cursor: default;
+}
+
+.btn-toggle-peek {
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    cursor: pointer;
+    padding: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: var(--radius-sm);
+    transition: var(--transition);
+}
+
+.btn-toggle-peek:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.12);
+}
+
+.host-invite-bar .btn-icon-only {
+    padding: 9px 11px;
+    border-radius: var(--radius-md);
 }
 
 .hidden { display: none !important; }

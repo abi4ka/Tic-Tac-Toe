@@ -11,6 +11,9 @@ document.addEventListener('DOMContentLoaded', () => {
     const STATUS_SVG_X = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-x)" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
     const STATUS_SVG_O = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-o)" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/></svg>`;
 
+    const ICON_RELOAD = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>`;
+    const ICON_EXIT = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>`;
+
     // Application Mode: 'local' or 'online'
     let currentMode = 'local';
 
@@ -21,6 +24,10 @@ document.addEventListener('DOMContentLoaded', () => {
     let mySymbol = 'X';
     let currentTurn = 'X';
     let startingSymbol = 'X';
+    let hasActiveSession = false;
+    let isOpponentConnected = false;
+    let lastWinner = null;
+    let lastWinCombo = null;
 
     let boardState = Array(9).fill(null);
     let isGameActive = true;
@@ -74,8 +81,17 @@ document.addEventListener('DOMContentLoaded', () => {
     const reactionsBar = document.getElementById('reactions-bar');
     const emojiBtns = document.querySelectorAll('.emoji-btn');
     const btnRestart = document.getElementById('btn-restart');
+    const btnRestartIcon = document.getElementById('btn-restart-icon');
     const btnRestartText = document.getElementById('btn-restart-text');
     const btnShareOnline = document.getElementById('btn-share-online');
+
+    const hostInviteBar = document.getElementById('host-invite-bar');
+    const gameRoomCodeInput = document.getElementById('game-room-code-input');
+    const btnTogglePeek = document.getElementById('btn-toggle-peek');
+    const btnCopyGameCode = document.getElementById('btn-copy-game-code');
+    const iconEyeClosed = document.getElementById('icon-eye-closed');
+    const iconEyeOpen = document.getElementById('icon-eye-open');
+    let isCodeRevealed = false;
 
     // ==========================================
     // MENU NAVIGATION LOGIC
@@ -85,9 +101,15 @@ document.addEventListener('DOMContentLoaded', () => {
         currentMode = 'local';
         modeTag.textContent = 'LOCAL';
         reactionsBar.classList.add('hidden');
-        btnShareOnline.classList.add('hidden');
+        if (hostInviteBar) hostInviteBar.classList.add('hidden');
+        isCodeRevealed = false;
 
         if (conn) { conn.close(); conn = null; }
+        if (peer) { peer.destroy(); peer = null; }
+        hasActiveSession = false;
+        isOpponentConnected = false;
+        lastWinner = null;
+        lastWinCombo = null;
 
         updatePlayerIdentityUI();
         resetGameLocal();
@@ -98,9 +120,10 @@ document.addEventListener('DOMContentLoaded', () => {
         currentMode = 'online';
         modeTag.textContent = 'ONLINE';
         reactionsBar.classList.remove('hidden');
-        btnShareOnline.classList.remove('hidden');
+        if (hostInviteBar) hostInviteBar.classList.add('hidden');
+        isCodeRevealed = false;
 
-        if (!peer) initPeer();
+        if (!peer || peer.destroyed) initPeer();
 
         if (conn && conn.open) {
             showScreen(screenGame);
@@ -109,11 +132,20 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    function leaveToMainMenu() {
+        if (conn) { conn.close(); conn = null; }
+        if (peer) { peer.destroy(); peer = null; }
+        hasActiveSession = false;
+        isOpponentConnected = false;
+        lastWinner = null;
+        lastWinCombo = null;
+        isCodeRevealed = false;
+        if (hostInviteBar) hostInviteBar.classList.add('hidden');
+        showScreen(screenMenu);
+    }
+
     backBtns.forEach(btn => {
-        btn.addEventListener('click', () => {
-            if (conn) { conn.close(); conn = null; }
-            showScreen(screenMenu);
-        });
+        btn.addEventListener('click', leaveToMainMenu);
     });
 
     // ==========================================
@@ -174,6 +206,12 @@ document.addEventListener('DOMContentLoaded', () => {
         roomCode = generateCode();
         myRole = 'host';
         mySymbol = 'X';
+        hasActiveSession = false;
+        isOpponentConnected = false;
+        lastWinner = null;
+        lastWinCombo = null;
+        isCodeRevealed = false;
+        updateCodePeekUI();
 
         if (peer) peer.destroy();
         peer = new Peer(PEER_PREFIX + roomCode);
@@ -187,16 +225,38 @@ document.addEventListener('DOMContentLoaded', () => {
                 setupConnection();
 
                 setTimeout(() => {
-                    // Host always starts first (X) in round 1
-                    startingSymbol = 'X';
+                    if (!hasActiveSession) {
+                        hasActiveSession = true;
+                        isOpponentConnected = true;
+                        startingSymbol = 'X';
 
-                    sendData({
-                        type: 'INIT_GAME',
-                        scores: scores,
-                        startingSymbol: startingSymbol
-                    });
-                    startOnlineGame();
-                    showToast('Player 2 connected!');
+                        sendData({
+                            type: 'INIT_GAME',
+                            scores: scores,
+                            startingSymbol: startingSymbol
+                        });
+                        startOnlineGame();
+                        showToast('Player 2 connected!');
+                    } else {
+                        isOpponentConnected = true;
+                        sendData({
+                            type: 'SYNC_GAME',
+                            scores: scores,
+                            startingSymbol: startingSymbol,
+                            boardState: boardState,
+                            currentTurn: currentTurn,
+                            isGameActive: isGameActive,
+                            lastWinner: lastWinner,
+                            lastWinCombo: lastWinCombo
+                        });
+                        if (isGameActive) {
+                            updateTurnUI();
+                            btnRestart.classList.add('hidden');
+                        } else {
+                            setRestartButtonState('restart', 'New Game');
+                        }
+                        showToast('Player 2 reconnected!');
+                    }
                 }, 400);
             });
         });
@@ -231,6 +291,11 @@ document.addEventListener('DOMContentLoaded', () => {
         myRole = 'joiner';
         mySymbol = 'O';
 
+        if (conn) {
+            conn.close();
+            conn = null;
+        }
+
         conn = peer.connect(PEER_PREFIX + roomCode);
         setupConnection();
     }
@@ -239,6 +304,7 @@ document.addEventListener('DOMContentLoaded', () => {
         if (!conn) return;
 
         conn.on('open', () => {
+            isOpponentConnected = true;
             if (myRole === 'joiner') {
                 showToast('Connected to room!');
             }
@@ -246,11 +312,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
         conn.on('data', (data) => handleData(data));
         conn.on('close', () => {
+            isOpponentConnected = false;
             showToast('Opponent disconnected');
-            isGameActive = false;
             statusText.textContent = 'Opponent Left';
             statusIcon.innerHTML = '⚠️';
+            setRestartButtonState('exit', 'Back to Menu');
             btnRestart.classList.remove('hidden');
+        });
+        conn.on('error', () => {
+            isOpponentConnected = false;
         });
     }
 
@@ -261,9 +331,34 @@ document.addEventListener('DOMContentLoaded', () => {
     function handleData(data) {
         switch (data.type) {
             case 'INIT_GAME':
+                hasActiveSession = true;
+                isOpponentConnected = true;
                 if (data.scores) scores = data.scores;
                 if (data.startingSymbol) startingSymbol = data.startingSymbol;
                 startOnlineGame();
+                break;
+            case 'SYNC_GAME':
+                hasActiveSession = true;
+                isOpponentConnected = true;
+                if (data.scores) scores = data.scores;
+                if (data.startingSymbol) startingSymbol = data.startingSymbol;
+                boardState = data.boardState ? [...data.boardState] : Array(9).fill(null);
+                currentTurn = data.currentTurn || 'X';
+                isGameActive = data.isGameActive;
+                lastWinner = data.lastWinner;
+                lastWinCombo = data.lastWinCombo;
+
+                showScreen(screenGame);
+                updatePlayerIdentityUI();
+                updateScoresUI();
+                restoreBoardUI();
+
+                if (isGameActive) {
+                    updateTurnUI();
+                } else if (lastWinner) {
+                    renderGameEndUI(lastWinner, lastWinCombo);
+                }
+                showToast('Reconnected to game!');
                 break;
             case 'MOVE':
                 applyMove(data.index, data.symbol);
@@ -282,7 +377,7 @@ document.addEventListener('DOMContentLoaded', () => {
                         showToast('New game started!');
                     }
                 } else {
-                    btnRestartText.textContent = 'Accept Rematch';
+                    setRestartButtonState('restart', 'Accept Rematch');
                     btnRestart.classList.remove('hidden');
                     showToast('Opponent requested a new game!');
                 }
@@ -298,6 +393,73 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function setRestartButtonState(mode, text = null) {
+        if (mode === 'exit') {
+            if (btnRestartIcon) btnRestartIcon.innerHTML = ICON_EXIT;
+            btnRestartText.textContent = text || 'Back to Menu';
+        } else {
+            if (btnRestartIcon) btnRestartIcon.innerHTML = ICON_RELOAD;
+            btnRestartText.textContent = text || 'New Game';
+        }
+    }
+
+    function updateCodePeekUI() {
+        if (!gameRoomCodeInput) return;
+        gameRoomCodeInput.value = isCodeRevealed ? (roomCode || '') : '******';
+        if (isCodeRevealed) {
+            if (iconEyeClosed) iconEyeClosed.classList.add('hidden');
+            if (iconEyeOpen) iconEyeOpen.classList.remove('hidden');
+        } else {
+            if (iconEyeClosed) iconEyeClosed.classList.remove('hidden');
+            if (iconEyeOpen) iconEyeOpen.classList.add('hidden');
+        }
+    }
+
+    function restoreBoardUI() {
+        rematchRequested = { me: false, opponent: false };
+        setRestartButtonState('restart', 'New Game');
+        if (isGameActive) {
+            btnRestart.classList.add('hidden');
+        } else {
+            btnRestart.classList.remove('hidden');
+        }
+
+        cells.forEach((cell, i) => {
+            const symbol = boardState[i];
+            cell.className = 'cell';
+            if (symbol) {
+                cell.innerHTML = symbol === 'X' ? SVG_X : SVG_O;
+                cell.classList.add(symbol.toLowerCase());
+                cell.setAttribute('disabled', 'true');
+            } else {
+                cell.innerHTML = '';
+                cell.removeAttribute('disabled');
+            }
+        });
+    }
+
+    function renderGameEndUI(winner, winCombo) {
+        isGameActive = false;
+        setRestartButtonState('restart', 'New Game');
+        btnRestart.classList.remove('hidden');
+
+        if (winner === 'draw') {
+            statusText.textContent = 'Draw!';
+            statusIcon.innerHTML = '🤝';
+        } else {
+            if (winCombo) {
+                winCombo.forEach(i => cells[i].classList.add(`winner-${winner.toLowerCase()}`));
+            }
+            if (currentMode === 'online') {
+                statusText.textContent = winner === mySymbol ? 'You Win!' : 'Opponent Wins!';
+                statusIcon.innerHTML = '🏆';
+            } else {
+                statusText.textContent = 'Winner';
+                statusIcon.innerHTML = winner === 'X' ? STATUS_SVG_X : STATUS_SVG_O;
+            }
+        }
+    }
+
     function startOnlineGame() {
         showScreen(screenGame);
         updatePlayerIdentityUI();
@@ -310,9 +472,18 @@ document.addEventListener('DOMContentLoaded', () => {
             const isX = mySymbol === 'X';
             boxX.classList.toggle('player-self', isX);
             boxO.classList.toggle('player-self', !isX);
+
+            // Only host can see room code and invite link in game
+            if (myRole === 'host') {
+                if (hostInviteBar) hostInviteBar.classList.remove('hidden');
+                updateCodePeekUI();
+            } else {
+                if (hostInviteBar) hostInviteBar.classList.add('hidden');
+            }
         } else {
             boxX.classList.remove('player-self');
             boxO.classList.remove('player-self');
+            if (hostInviteBar) hostInviteBar.classList.add('hidden');
         }
     }
 
@@ -337,9 +508,11 @@ document.addEventListener('DOMContentLoaded', () => {
     function resetBoard() {
         boardState = Array(9).fill(null);
         isGameActive = true;
+        lastWinner = null;
+        lastWinCombo = null;
         rematchRequested = { me: false, opponent: false };
 
-        btnRestartText.textContent = 'New Game';
+        setRestartButtonState('restart', 'New Game');
         btnRestart.classList.add('hidden');
 
         cells.forEach(cell => {
@@ -359,9 +532,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
             if (!isGameActive || boardState[index] !== null) return;
 
-            if (currentMode === 'online' && currentTurn !== mySymbol) {
-                showToast("Opponent's turn!");
-                return;
+            if (currentMode === 'online') {
+                if (!conn || !conn.open || !isOpponentConnected) {
+                    showToast("Opponent is disconnected!");
+                    return;
+                }
+                if (currentTurn !== mySymbol) {
+                    showToast("Opponent's turn!");
+                    return;
+                }
             }
 
             applyMove(index, currentTurn);
@@ -414,6 +593,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleGameEnd(winner, winCombo) {
         isGameActive = false;
+        lastWinner = winner;
+        lastWinCombo = winCombo;
+        setRestartButtonState('restart', 'New Game');
         btnRestart.classList.remove('hidden');
 
         if (winner === 'draw') {
@@ -452,10 +634,14 @@ document.addEventListener('DOMContentLoaded', () => {
             prepareNextRoundTurn();
             resetBoard();
         } else {
+            if (!conn || !conn.open || !isOpponentConnected) {
+                leaveToMainMenu();
+                return;
+            }
             if (rematchRequested.me) return;
 
             rematchRequested.me = true;
-            btnRestartText.textContent = 'Waiting...';
+            setRestartButtonState('restart', 'Waiting...');
             sendData({ type: 'REMATCH_REQUEST' });
 
             if (rematchRequested.opponent) {
@@ -509,6 +695,25 @@ document.addEventListener('DOMContentLoaded', () => {
         const url = `${window.location.origin}${window.location.pathname}?room=${roomCode}`;
         copyText(url, 'Direct link copied!');
     });
+
+    if (btnTogglePeek) {
+        btnTogglePeek.addEventListener('click', () => {
+            isCodeRevealed = !isCodeRevealed;
+            updateCodePeekUI();
+        });
+    }
+
+    if (btnCopyGameCode) {
+        btnCopyGameCode.addEventListener('click', () => {
+            if (roomCode) copyText(roomCode, 'Room code copied!');
+        });
+    }
+
+    if (gameRoomCodeInput) {
+        gameRoomCodeInput.addEventListener('click', () => {
+            if (roomCode) copyText(roomCode, 'Room code copied!');
+        });
+    }
 
     function copyText(str, msg) {
         if (navigator.clipboard) {
