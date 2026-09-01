@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tic Tac Toe | Local & Online</title>
+    <meta name="description" content="Play Tic Tac Toe online or locally. Clean, minimal, serverless WebRTC.">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+    
+    <!-- PeerJS WebRTC Library -->
+    <script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+    
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Ambient Background Glows -->
+    <div class="ambient-bg">
+        <div class="glow-orb orb-1"></div>
+        <div class="glow-orb orb-2"></div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container" class="toast-container"></div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="header">
+            <div class="logo">
+                <h1>TIC TAC TOE</h1>
+            </div>
+        </header>
+
+        <!-- SCREEN 1: MAIN MENU -->
+        <section id="screen-menu" class="card screen active">
+            <h2 class="card-subtitle">SELECT MODE</h2>
+            <div class="menu-options">
+                <button id="btn-select-local" class="btn btn-secondary btn-large menu-btn">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+                    <span>LOCAL 2 PLAYER</span>
+                </button>
+
+                <button id="btn-select-online" class="btn btn-secondary btn-large menu-btn">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                    <span>ONLINE MULTIPLAYER</span>
+                </button>
+            </div>
+        </section>
+
+        <!-- SCREEN 2: ONLINE LOBBY -->
+        <section id="screen-online-lobby" class="card screen">
+            <div class="card-header-nav">
+                <button class="btn-back btn-to-menu" title="Back to Menu">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                    Back
+                </button>
+                <span class="card-tag">ONLINE</span>
+            </div>
+
+            <div class="lobby-actions">
+                <button id="btn-create-room" class="btn btn-primary btn-full">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                    Create Room
+                </button>
+                
+                <div class="divider"><span>OR JOIN CODE</span></div>
+
+                <div class="input-group">
+                    <input type="text" id="input-room-code" placeholder="CODE" maxlength="6" autocomplete="off">
+                    <button id="btn-join-room" class="btn btn-secondary">Join</button>
+                </div>
+            </div>
+
+            <div class="network-badge" id="peer-status-badge">
+                <span class="dot"></span>
+                <span id="peer-status-text">Connecting...</span>
+            </div>
+        </section>
+
+        <!-- SCREEN 3: ONLINE WAITING -->
+        <section id="screen-waiting" class="card screen">
+            <div class="card-header-nav">
+                <button class="btn-back btn-to-menu" title="Back to Menu">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                    Back
+                </button>
+            </div>
+
+            <div class="waiting-box">
+                <div class="loader-dots"><span></span><span></span><span></span></div>
+                <h3>Waiting for Opponent...</h3>
+                
+                <div class="code-box">
+                    <span id="display-room-code" class="code-text">------</span>
+                    <button id="btn-copy-code" class="btn-icon" title="Copy Code">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    </button>
+                </div>
+
+                <button id="btn-copy-link" class="btn btn-accent btn-full">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                    Copy Direct Link
+                </button>
+            </div>
+        </section>
+
+        <!-- SCREEN 4: GAMEPLAY BOARD -->
+        <section id="screen-game" class="card screen">
+            <!-- Navigation & Mode Indicator -->
+            <div class="card-header-nav">
+                <button class="btn-back btn-to-menu" title="Back to Main Menu">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="19" y1="12" x2="5" y2="12"></line><polyline points="12 19 5 12 12 5"></polyline></svg>
+                    Menu
+                </button>
+                <span class="card-tag" id="mode-tag">LOCAL</span>
+            </div>
+
+            <!-- SVG Vector Scoreboard -->
+            <div class="scoreboard">
+                <div class="player-box box-x" id="box-x">
+                    <svg class="score-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-x)" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                    <span class="score" id="score-x">0</span>
+                </div>
+
+                <div class="draw-box">
+                    <span class="draw-title">DRAWS</span>
+                    <span class="score" id="score-draw">0</span>
+                </div>
+
+                <div class="player-box box-o" id="box-o">
+                    <span class="score" id="score-o">0</span>
+                    <svg class="score-icon" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--color-o)" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/></svg>
+                </div>
+            </div>
+
+            <!-- Status Indicator Bar -->
+            <div class="status-bar" id="status-bar">
+                <span id="status-text">Turn</span>
+                <span id="status-icon" class="status-mark">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-x)" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                </span>
+            </div>
+
+            <!-- 3x3 Grid -->
+            <div class="board-container">
+                <div class="board" id="board">
+                    <button class="cell" data-index="0"></button>
+                    <button class="cell" data-index="1"></button>
+                    <button class="cell" data-index="2"></button>
+                    <button class="cell" data-index="3"></button>
+                    <button class="cell" data-index="4"></button>
+                    <button class="cell" data-index="5"></button>
+                    <button class="cell" data-index="6"></button>
+                    <button class="cell" data-index="7"></button>
+                    <button class="cell" data-index="8"></button>
+                </div>
+            </div>
+
+            <!-- Quick Emoji Reactions (Only active in Online mode) -->
+            <div id="reactions-bar" class="reactions-bar hidden">
+                <button class="emoji-btn" data-emoji="👍">👍</button>
+                <button class="emoji-btn" data-emoji="🔥">🔥</button>
+                <button class="emoji-btn" data-emoji="👏">👏</button>
+                <button class="emoji-btn" data-emoji="😂">😂</button>
+            </div>
+
+            <div id="reaction-container" class="reaction-container"></div>
+
+            <!-- Action Controls -->
+            <div class="controls">
+                <button id="btn-restart" class="btn btn-primary btn-flex hidden">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/></svg>
+                    <span id="btn-restart-text">New Game</span>
+                </button>
+                <button id="btn-share-online" class="btn btn-secondary btn-icon-only hidden" title="Copy Room Link">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path></svg>
+                </button>
+            </div>
+        </section>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
