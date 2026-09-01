@@ -1,5 +1,5 @@
 /**
- * Tic Tac Toe - Minimalist English Logic (Vector SVG Icons)
+ * Tic Tac Toe - Minimalist English Logic (Random First Turn & Alternating Rematches)
  */
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -20,6 +20,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let myRole = null; // 'host' (X) or 'joiner' (O)
     let mySymbol = 'X';
     let currentTurn = 'X';
+    let startingSymbol = 'X';
+
     let boardState = Array(9).fill(null);
     let isGameActive = true;
     let roomCode = null;
@@ -87,6 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         if (conn) { conn.close(); conn = null; }
 
+        updatePlayerIdentityUI();
         resetGameLocal();
         showScreen(screenGame);
     });
@@ -184,7 +187,14 @@ document.addEventListener('DOMContentLoaded', () => {
                 setupConnection();
 
                 setTimeout(() => {
-                    sendData({ type: 'INIT_GAME', scores: scores });
+                    // Host always starts first (X) in round 1
+                    startingSymbol = 'X';
+
+                    sendData({
+                        type: 'INIT_GAME',
+                        scores: scores,
+                        startingSymbol: startingSymbol
+                    });
                     startOnlineGame();
                     showToast('Player 2 connected!');
                 }, 400);
@@ -230,7 +240,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
         conn.on('open', () => {
             if (myRole === 'joiner') {
-                startOnlineGame();
                 showToast('Connected to room!');
             }
         });
@@ -253,7 +262,8 @@ document.addEventListener('DOMContentLoaded', () => {
         switch (data.type) {
             case 'INIT_GAME':
                 if (data.scores) scores = data.scores;
-                updateScoresUI();
+                if (data.startingSymbol) startingSymbol = data.startingSymbol;
+                startOnlineGame();
                 break;
             case 'MOVE':
                 applyMove(data.index, data.symbol);
@@ -261,11 +271,24 @@ document.addEventListener('DOMContentLoaded', () => {
                 break;
             case 'REMATCH_REQUEST':
                 rematchRequested.opponent = true;
-                btnRestartText.textContent = 'Accept Rematch';
-                btnRestart.classList.remove('hidden');
-                showToast('Opponent requested a new game!');
+                if (rematchRequested.me) {
+                    if (myRole === 'host') {
+                        prepareNextRoundTurn();
+                        sendData({
+                            type: 'REMATCH_ACCEPT',
+                            startingSymbol: startingSymbol
+                        });
+                        resetBoard();
+                        showToast('New game started!');
+                    }
+                } else {
+                    btnRestartText.textContent = 'Accept Rematch';
+                    btnRestart.classList.remove('hidden');
+                    showToast('Opponent requested a new game!');
+                }
                 break;
             case 'REMATCH_ACCEPT':
+                if (data.startingSymbol) startingSymbol = data.startingSymbol;
                 resetBoard();
                 showToast('New game started!');
                 break;
@@ -277,8 +300,20 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function startOnlineGame() {
         showScreen(screenGame);
+        updatePlayerIdentityUI();
         resetBoard();
         updateScoresUI();
+    }
+
+    function updatePlayerIdentityUI() {
+        if (currentMode === 'online') {
+            const isX = mySymbol === 'X';
+            boxX.classList.toggle('player-self', isX);
+            boxO.classList.toggle('player-self', !isX);
+        } else {
+            boxX.classList.remove('player-self');
+            boxO.classList.remove('player-self');
+        }
     }
 
     // ==========================================
@@ -287,14 +322,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function resetGameLocal() {
         scores = { X: 0, O: 0, draw: 0 };
+        // First game always starts with X (Player 1)
+        startingSymbol = 'X';
         resetBoard();
         updateScoresUI();
+    }
+
+    function prepareNextRoundTurn() {
+        // Subsequent rounds alternate starting player (X -> O -> X -> O)
+        startingSymbol = startingSymbol === 'X' ? 'O' : 'X';
+        currentTurn = startingSymbol;
     }
 
     function resetBoard() {
         boardState = Array(9).fill(null);
         isGameActive = true;
-        currentTurn = 'X';
         rematchRequested = { me: false, opponent: false };
 
         btnRestartText.textContent = 'New Game';
@@ -306,6 +348,8 @@ document.addEventListener('DOMContentLoaded', () => {
             cell.removeAttribute('disabled');
         });
 
+        // Set turn for current round
+        currentTurn = startingSymbol;
         updateTurnUI();
     }
 
@@ -356,9 +400,6 @@ document.addEventListener('DOMContentLoaded', () => {
         } else {
             statusText.textContent = 'Turn';
         }
-
-        boxX.classList.toggle('turn-active', currentTurn === 'X');
-        boxO.classList.toggle('turn-active', currentTurn === 'O');
     }
 
     function checkWin(symbol) {
@@ -408,6 +449,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function handleRestartRequest() {
         if (currentMode === 'local') {
+            prepareNextRoundTurn();
             resetBoard();
         } else {
             if (rematchRequested.me) return;
@@ -417,7 +459,12 @@ document.addEventListener('DOMContentLoaded', () => {
             sendData({ type: 'REMATCH_REQUEST' });
 
             if (rematchRequested.opponent) {
-                sendData({ type: 'REMATCH_ACCEPT' });
+                // Alternates starting symbol for host/joiner in online mode
+                prepareNextRoundTurn();
+                sendData({
+                    type: 'REMATCH_ACCEPT',
+                    startingSymbol: startingSymbol
+                });
                 resetBoard();
             } else {
                 showToast('Rematch request sent!');
@@ -481,7 +528,6 @@ document.addEventListener('DOMContentLoaded', () => {
         const container = document.getElementById('toast-container');
         if (!container) return;
 
-        // Limit visible toasts to maximum 3; remove oldest if limit reached
         while (container.children.length >= 3) {
             container.firstElementChild.remove();
         }

@@ -388,8 +388,14 @@ body {
     transition: var(--transition);
 }
 
-.box-x.turn-active { border-color: var(--color-x); box-shadow: 0 0 16px var(--color-x-glow); }
-.box-o.turn-active { border-color: var(--color-o); box-shadow: 0 0 16px var(--color-o-glow); }
+.box-x.player-self { 
+    border-color: var(--color-x); 
+    box-shadow: 0 0 16px var(--color-x-glow); 
+}
+.box-o.player-self { 
+    border-color: var(--color-o); 
+    box-shadow: 0 0 16px var(--color-o-glow); 
+}
 
 .player-box .score-icon {
     display: inline-block;
