@@ -32,6 +32,7 @@ document.addEventListener('DOMContentLoaded', () => {
     let boardState = Array(9).fill(null);
     let isGameActive = true;
     let roomCode = null;
+    let pendingJoinRoom = null;
 
     let scores = { X: 0, O: 0, draw: 0 };
     let rematchRequested = { me: false, opponent: false };
@@ -65,6 +66,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const displayRoomCode = document.getElementById('display-room-code');
     const btnCopyCode = document.getElementById('btn-copy-code');
     const btnCopyLink = document.getElementById('btn-copy-link');
+    const waitingTitle = document.getElementById('waiting-title');
+    const waitingCodeBox = document.getElementById('waiting-code-box');
 
     // UI Elements - Gameplay
     const modeTag = document.getElementById('mode-tag');
@@ -140,7 +143,11 @@ document.addEventListener('DOMContentLoaded', () => {
         lastWinner = null;
         lastWinCombo = null;
         isCodeRevealed = false;
+        pendingJoinRoom = null;
         if (hostInviteBar) hostInviteBar.classList.add('hidden');
+        if (window.location.search) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
         showScreen(screenMenu);
     }
 
@@ -153,18 +160,25 @@ document.addEventListener('DOMContentLoaded', () => {
     // ==========================================
 
     function initPeer() {
+        if (peer && !peer.destroyed) return;
+
         peer = new Peer();
 
         peer.on('open', () => {
             peerStatusBadge.classList.add('connected');
             peerStatusText.textContent = 'Network Ready';
-            checkUrlRoomParam();
+            if (pendingJoinRoom) {
+                const code = pendingJoinRoom;
+                pendingJoinRoom = null;
+                joinOnlineRoom(code);
+            }
         });
 
         peer.on('error', (err) => {
             console.error('Peer error:', err);
             peerStatusBadge.classList.remove('connected');
             if (err.type === 'peer-unavailable') {
+                pendingJoinRoom = null;
                 showToast('Room not found or expired.');
                 showScreen(screenOnlineLobby);
             } else {
@@ -183,11 +197,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const urlParams = new URLSearchParams(window.location.search);
         const room = urlParams.get('room');
         if (room && room.length === 6) {
+            const code = room.toUpperCase();
             currentMode = 'online';
             modeTag.textContent = 'ONLINE';
-            inputRoomCode.value = room.toUpperCase();
-            joinOnlineRoom(room.toUpperCase());
+            reactionsBar.classList.remove('hidden');
+            inputRoomCode.value = code;
+            joinOnlineRoom(code);
+            return true;
         }
+        return false;
+    }
+
+    function showConnectingScreen(code) {
+        if (waitingTitle) waitingTitle.textContent = `Connecting to ${code}...`;
+        if (waitingCodeBox) waitingCodeBox.classList.add('hidden');
+        if (btnCopyLink) btnCopyLink.classList.add('hidden');
+        showScreen(screenWaiting);
     }
 
     function generateCode() {
@@ -200,6 +225,7 @@ document.addEventListener('DOMContentLoaded', () => {
     btnCreateRoom.addEventListener('click', () => {
         if (!peer || peer.disconnected) {
             showToast('Connecting to network...');
+            if (!peer || peer.destroyed) initPeer();
             return;
         }
 
@@ -218,6 +244,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
         peer.on('open', () => {
             displayRoomCode.textContent = roomCode;
+            if (waitingTitle) waitingTitle.textContent = 'Waiting for Opponent...';
+            if (waitingCodeBox) waitingCodeBox.classList.remove('hidden');
+            if (btnCopyLink) btnCopyLink.classList.remove('hidden');
             showScreen(screenWaiting);
 
             peer.on('connection', (connection) => {
@@ -282,14 +311,19 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function joinOnlineRoom(code) {
-        if (!peer || peer.disconnected) {
-            showToast('Connecting...');
-            return;
-        }
-
         roomCode = code;
         myRole = 'joiner';
         mySymbol = 'O';
+
+        showConnectingScreen(code);
+
+        if (!peer || peer.destroyed || !peer.open) {
+            pendingJoinRoom = code;
+            if (!peer || peer.destroyed) {
+                initPeer();
+            }
+            return;
+        }
 
         if (conn) {
             conn.close();
@@ -787,6 +821,8 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {}
     }
 
-    showScreen(screenMenu);
-    checkUrlRoomParam();
+    const hasRoomParam = checkUrlRoomParam();
+    if (!hasRoomParam) {
+        showScreen(screenMenu);
+    }
 });
