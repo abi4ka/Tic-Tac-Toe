@@ -58,7 +58,7 @@ body {
     width: 100vw;
     height: 100vh;
     pointer-events: none;
-    z-index: 0;
+    z-index: -1;
 }
 
 .glow-orb {
@@ -545,19 +545,22 @@ body {
     width: 100vw;
     height: 100vh;
     pointer-events: none;
-    z-index: 100;
+    z-index: 0;
+    overflow: hidden;
 }
 
 .floating-emoji {
     position: absolute;
     font-size: 2.8rem;
-    animation: emojiFloat 2s ease-out forwards;
+    pointer-events: none;
+    user-select: none;
+    animation: emojiFloat 2.3s ease-out forwards;
 }
 
 @keyframes emojiFloat {
-    0% { opacity: 0; transform: translateY(0) scale(0.6); }
-    20% { opacity: 1; transform: translateY(-30px) scale(1.2); }
-    100% { opacity: 0; transform: translateY(-200px) scale(0.8); }
+    0% { opacity: 0; transform: translate(-50%, 0) scale(0.6); }
+    15% { opacity: 1; transform: translate(-50%, -45px) scale(1.15); }
+    100% { opacity: 0; transform: translate(-50%, -360px) scale(0.85); }
 }
 
 /* Controls & Host Invite Bar */

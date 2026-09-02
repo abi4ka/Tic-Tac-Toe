@@ -706,14 +706,23 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function spawnEmoji(emoji) {
         const container = document.getElementById('reaction-container');
+        if (!container) return;
+
         const elem = document.createElement('div');
         elem.className = 'floating-emoji';
         elem.textContent = emoji;
-        elem.style.left = `${Math.random() * 60 + 20}vw`;
-        elem.style.bottom = '80px';
+
+        // Position at the bottom of the screen, with a generous spread out to the sides
+        const centerX = window.innerWidth / 2;
+        const maxSpread = Math.min(window.innerWidth * 0.8, 720);
+        const spreadX = (Math.random() - 0.5) * maxSpread;
+        const startBottom = 25 + Math.random() * 30;
+
+        elem.style.left = `${centerX + spreadX}px`;
+        elem.style.bottom = `${startBottom}px`;
 
         container.appendChild(elem);
-        setTimeout(() => elem.remove(), 2000);
+        setTimeout(() => elem.remove(), 2300);
     }
 
     // ==========================================
