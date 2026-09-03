@@ -684,14 +684,15 @@ document.addEventListener('DOMContentLoaded', () => {
             setRestartButtonState('restart', 'Waiting...');
             sendData({ type: 'REMATCH_REQUEST' });
 
-            if (rematchRequested.opponent) {
-                // Alternates starting symbol for host/joiner in online mode
+            if (rematchRequested.opponent && myRole === 'host') {
+                // Host is authority: alternates starting symbol and confirms rematch
                 prepareNextRoundTurn();
                 sendData({
                     type: 'REMATCH_ACCEPT',
                     startingSymbol: startingSymbol
                 });
                 resetBoard();
+                showToast('New game started!');
             } else {
                 showToast('Rematch request sent!');
             }
