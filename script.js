@@ -823,18 +823,33 @@ document.addEventListener('DOMContentLoaded', () => {
         target.classList.add('active');
     }
 
+    let sharedAudioCtx = null;
+
+    function getAudioContext() {
+        if (!sharedAudioCtx) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            if (AudioCtx) {
+                sharedAudioCtx = new AudioCtx();
+            }
+        }
+        if (sharedAudioCtx && sharedAudioCtx.state === 'suspended') {
+            sharedAudioCtx.resume().catch(() => {});
+        }
+        return sharedAudioCtx;
+    }
+
     function playSound(type) {
         try {
-            const AudioCtx = window.AudioContext || window.webkitAudioContext;
-            if (!AudioCtx) return;
-            const ctx = new AudioCtx();
+            const ctx = getAudioContext();
+            if (!ctx) return;
+
+            const now = ctx.currentTime;
             const osc = ctx.createOscillator();
             const gain = ctx.createGain();
 
             osc.connect(gain);
             gain.connect(ctx.destination);
 
-            const now = ctx.currentTime;
             if (type === 'move') {
                 osc.type = 'sine';
                 osc.frequency.setValueAtTime(450, now);
@@ -852,6 +867,23 @@ document.addEventListener('DOMContentLoaded', () => {
                 gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
                 osc.start(now);
                 osc.stop(now + 0.35);
+            } else if (type === 'lose') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(392.00, now);
+                osc.frequency.setValueAtTime(329.63, now + 0.12);
+                osc.frequency.setValueAtTime(261.63, now + 0.24);
+                gain.gain.setValueAtTime(0.15, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.4);
+                osc.start(now);
+                osc.stop(now + 0.4);
+            } else if (type === 'draw') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(370, now);
+                osc.frequency.setValueAtTime(330, now + 0.1);
+                gain.gain.setValueAtTime(0.12, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+                osc.start(now);
+                osc.stop(now + 0.25);
             }
         } catch (e) {}
     }
