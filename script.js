@@ -144,6 +144,8 @@ document.addEventListener('DOMContentLoaded', () => {
         lastWinCombo = null;
         isCodeRevealed = false;
         pendingJoinRoom = null;
+        scores = { X: 0, O: 0, draw: 0 };
+        updateScoresUI();
         if (hostInviteBar) hostInviteBar.classList.add('hidden');
         if (window.location.search) {
             window.history.replaceState({}, document.title, window.location.pathname);
@@ -237,6 +239,8 @@ document.addEventListener('DOMContentLoaded', () => {
         lastWinner = null;
         lastWinCombo = null;
         isCodeRevealed = false;
+        scores = { X: 0, O: 0, draw: 0 };
+        updateScoresUI();
         updateCodePeekUI();
 
         if (peer) peer.destroy();
@@ -279,6 +283,8 @@ document.addEventListener('DOMContentLoaded', () => {
         roomCode = code;
         myRole = 'joiner';
         mySymbol = 'O';
+        scores = { X: 0, O: 0, draw: 0 };
+        updateScoresUI();
 
         showConnectingScreen(code);
 
