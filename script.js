@@ -462,7 +462,6 @@ document.addEventListener('DOMContentLoaded', () => {
                             startingSymbol: startingSymbol
                         });
                         resetBoard();
-                        showToast('New game started!');
                     }
                 } else {
                     setRestartButtonState('restart', 'Accept Rematch');
@@ -473,7 +472,6 @@ document.addEventListener('DOMContentLoaded', () => {
             case 'REMATCH_ACCEPT':
                 if (data.startingSymbol) startingSymbol = data.startingSymbol;
                 resetBoard();
-                showToast('New game started!');
                 break;
             case 'EMOJI':
                 if (typeof data.emoji === 'string' && data.emoji.length <= 4) {
@@ -742,9 +740,6 @@ document.addEventListener('DOMContentLoaded', () => {
                     startingSymbol: startingSymbol
                 });
                 resetBoard();
-                showToast('New game started!');
-            } else {
-                showToast('Rematch request sent!');
             }
         }
     }
