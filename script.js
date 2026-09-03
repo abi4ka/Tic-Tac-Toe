@@ -36,6 +36,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     let scores = { X: 0, O: 0, draw: 0 };
     let rematchRequested = { me: false, opponent: false };
+    let joinTimeout = null;
 
     const WINNING_COMBOS = [
         [0, 1, 2], [3, 4, 5], [6, 7, 8],
@@ -135,7 +136,22 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
 
+    function clearJoinTimeout() {
+        if (joinTimeout) {
+            clearTimeout(joinTimeout);
+            joinTimeout = null;
+        }
+    }
+
+    function clearUrlRoomParam() {
+        if (window.location.search) {
+            window.history.replaceState({}, document.title, window.location.pathname);
+        }
+    }
+
     function leaveToMainMenu() {
+        clearJoinTimeout();
+        clearUrlRoomParam();
         if (conn) { conn.close(); conn = null; }
         if (peer) { peer.destroy(); peer = null; }
         hasActiveSession = false;
@@ -147,9 +163,6 @@ document.addEventListener('DOMContentLoaded', () => {
         scores = { X: 0, O: 0, draw: 0 };
         updateScoresUI();
         if (hostInviteBar) hostInviteBar.classList.add('hidden');
-        if (window.location.search) {
-            window.history.replaceState({}, document.title, window.location.pathname);
-        }
         showScreen(screenMenu);
     }
 
@@ -179,8 +192,10 @@ document.addEventListener('DOMContentLoaded', () => {
         peer.on('error', (err) => {
             console.error('Peer error:', err);
             peerStatusBadge.classList.remove('connected');
+            clearJoinTimeout();
             if (err.type === 'peer-unavailable') {
                 pendingJoinRoom = null;
+                clearUrlRoomParam();
                 showToast('Room not found or expired.');
                 showScreen(screenOnlineLobby);
             } else {
@@ -288,6 +303,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
         showConnectingScreen(code);
 
+        clearJoinTimeout();
+        joinTimeout = setTimeout(() => {
+            if (myRole === 'joiner' && !isOpponentConnected) {
+                showToast('Connection timed out. Room may not exist.');
+                clearUrlRoomParam();
+                if (conn) {
+                    conn.close();
+                    conn = null;
+                }
+                showScreen(screenOnlineLobby);
+            }
+        }, 12000);
+
         if (!peer || peer.destroyed || !peer.open) {
             pendingJoinRoom = code;
             if (!peer || peer.destroyed) {
@@ -312,6 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const handleOpen = () => {
             if (isReady) return;
             isReady = true;
+            clearJoinTimeout();
             isOpponentConnected = true;
 
             if (myRole === 'host') {
@@ -358,6 +387,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         conn.on('data', (data) => handleData(data));
         conn.on('close', () => {
+            clearJoinTimeout();
             isOpponentConnected = false;
             showToast('Opponent disconnected');
             statusText.textContent = 'Opponent Left';
@@ -366,6 +396,7 @@ document.addEventListener('DOMContentLoaded', () => {
             btnRestart.classList.remove('hidden');
         });
         conn.on('error', () => {
+            clearJoinTimeout();
             isOpponentConnected = false;
         });
     }
