@@ -252,41 +252,6 @@ document.addEventListener('DOMContentLoaded', () => {
             peer.on('connection', (connection) => {
                 conn = connection;
                 setupConnection();
-
-                setTimeout(() => {
-                    if (!hasActiveSession) {
-                        hasActiveSession = true;
-                        isOpponentConnected = true;
-                        startingSymbol = 'X';
-
-                        sendData({
-                            type: 'INIT_GAME',
-                            scores: scores,
-                            startingSymbol: startingSymbol
-                        });
-                        startOnlineGame();
-                        showToast('Player 2 connected!');
-                    } else {
-                        isOpponentConnected = true;
-                        sendData({
-                            type: 'SYNC_GAME',
-                            scores: scores,
-                            startingSymbol: startingSymbol,
-                            boardState: boardState,
-                            currentTurn: currentTurn,
-                            isGameActive: isGameActive,
-                            lastWinner: lastWinner,
-                            lastWinCombo: lastWinCombo
-                        });
-                        if (isGameActive) {
-                            updateTurnUI();
-                            btnRestart.classList.add('hidden');
-                        } else {
-                            setRestartButtonState('restart', 'New Game');
-                        }
-                        showToast('Player 2 reconnected!');
-                    }
-                }, 400);
             });
         });
 
@@ -337,12 +302,53 @@ document.addEventListener('DOMContentLoaded', () => {
     function setupConnection() {
         if (!conn) return;
 
-        conn.on('open', () => {
+        let isReady = false;
+        const handleOpen = () => {
+            if (isReady) return;
+            isReady = true;
             isOpponentConnected = true;
-            if (myRole === 'joiner') {
+
+            if (myRole === 'host') {
+                if (!hasActiveSession) {
+                    hasActiveSession = true;
+                    startingSymbol = 'X';
+
+                    sendData({
+                        type: 'INIT_GAME',
+                        scores: scores,
+                        startingSymbol: startingSymbol
+                    });
+                    startOnlineGame();
+                    showToast('Player 2 connected!');
+                } else {
+                    sendData({
+                        type: 'SYNC_GAME',
+                        scores: scores,
+                        startingSymbol: startingSymbol,
+                        boardState: boardState,
+                        currentTurn: currentTurn,
+                        isGameActive: isGameActive,
+                        lastWinner: lastWinner,
+                        lastWinCombo: lastWinCombo
+                    });
+                    if (isGameActive) {
+                        updateTurnUI();
+                        btnRestart.classList.add('hidden');
+                    } else {
+                        setRestartButtonState('restart', 'New Game');
+                    }
+                    showToast('Player 2 reconnected!');
+                }
+            } else if (myRole === 'joiner') {
                 showToast('Connected to room!');
             }
-        });
+        };
+
+        if (conn.open) {
+            handleOpen();
+        } else {
+            conn.on('open', handleOpen);
+        }
 
         conn.on('data', (data) => handleData(data));
         conn.on('close', () => {
