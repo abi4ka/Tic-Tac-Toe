@@ -375,6 +375,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function handleData(data) {
+        if (!data || typeof data !== 'object') return;
+
         switch (data.type) {
             case 'INIT_GAME':
                 hasActiveSession = true;
@@ -407,8 +409,17 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast('Reconnected to game!');
                 break;
             case 'MOVE':
-                applyMove(data.index, data.symbol);
-                playSound('move');
+                if (
+                    isGameActive &&
+                    Number.isInteger(data.index) &&
+                    data.index >= 0 &&
+                    data.index < 9 &&
+                    boardState[data.index] === null &&
+                    data.symbol === currentTurn
+                ) {
+                    applyMove(data.index, data.symbol);
+                    playSound('move');
+                }
                 break;
             case 'REMATCH_REQUEST':
                 rematchRequested.opponent = true;
@@ -434,7 +445,9 @@ document.addEventListener('DOMContentLoaded', () => {
                 showToast('New game started!');
                 break;
             case 'EMOJI':
-                spawnEmoji(data.emoji);
+                if (typeof data.emoji === 'string' && data.emoji.length <= 4) {
+                    spawnEmoji(data.emoji);
+                }
                 break;
         }
     }
