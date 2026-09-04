@@ -174,10 +174,36 @@ document.addEventListener('DOMContentLoaded', () => {
     // PEERJS NETWORK SETUP
     // ==========================================
 
+    const PEER_CONFIG = {
+        debug: 1,
+        config: {
+            iceServers: [
+                { urls: 'stun:stun.l.google.com:19302' },
+                { urls: 'stun:stun1.l.google.com:19302' },
+                { urls: 'stun:openrelay.metered.ca:80' },
+                {
+                    urls: 'turn:openrelay.metered.ca:80',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                },
+                {
+                    urls: 'turn:openrelay.metered.ca:443',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                },
+                {
+                    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
+                    username: 'openrelayproject',
+                    credential: 'openrelayproject'
+                }
+            ]
+        }
+    };
+
     function initPeer() {
         if (peer && !peer.destroyed) return;
 
-        peer = new Peer();
+        peer = new Peer(PEER_CONFIG);
 
         peer.on('open', () => {
             peerStatusBadge.classList.add('connected');
@@ -259,7 +285,7 @@ document.addEventListener('DOMContentLoaded', () => {
         updateCodePeekUI();
 
         if (peer) peer.destroy();
-        peer = new Peer(PEER_PREFIX + roomCode);
+        peer = new Peer(PEER_PREFIX + roomCode, PEER_CONFIG);
 
         peer.on('open', () => {
             displayRoomCode.textContent = roomCode;
@@ -314,7 +340,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 showScreen(screenOnlineLobby);
             }
-        }, 12000);
+        }, 18000);
 
         if (!peer || peer.destroyed || !peer.open) {
             pendingJoinRoom = code;
@@ -395,7 +421,8 @@ document.addEventListener('DOMContentLoaded', () => {
             setRestartButtonState('exit', 'Back to Menu');
             btnRestart.classList.remove('hidden');
         });
-        conn.on('error', () => {
+        conn.on('error', (err) => {
+            console.error('Data connection error:', err);
             clearJoinTimeout();
             isOpponentConnected = false;
         });
