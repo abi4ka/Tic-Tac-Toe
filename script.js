@@ -60,8 +60,8 @@ document.addEventListener('DOMContentLoaded', () => {
     const btnCreateRoom = document.getElementById('btn-create-room');
     const btnJoinRoom = document.getElementById('btn-join-room');
     const inputRoomCode = document.getElementById('input-room-code');
-    const peerStatusBadge = document.getElementById('peer-status-badge');
-    const peerStatusText = document.getElementById('peer-status-text');
+    const networkStatusBadge = document.getElementById('network-status-badge');
+    const networkStatusText = document.getElementById('network-status-text');
 
     const displayRoomCode = document.getElementById('display-room-code');
     const btnCopyCode = document.getElementById('btn-copy-code');
@@ -175,27 +175,27 @@ document.addEventListener('DOMContentLoaded', () => {
         if (supabase) return true;
 
         if (typeof window.supabase === 'undefined' || !window.supabase.createClient) {
-            if (peerStatusBadge) peerStatusBadge.classList.remove('connected');
-            if (peerStatusText) peerStatusText.textContent = 'Connecting...';
+            if (networkStatusBadge) networkStatusBadge.classList.remove('connected');
+            if (networkStatusText) networkStatusText.textContent = 'Connecting...';
             return false;
         }
 
         const config = window.SUPABASE_CONFIG;
         if (!config || !config.url || !config.anonKey || config.url.includes('YOUR_PROJECT_ID')) {
-            if (peerStatusBadge) peerStatusBadge.classList.remove('connected');
-            if (peerStatusText) peerStatusText.textContent = 'Config Needed';
+            if (networkStatusBadge) networkStatusBadge.classList.remove('connected');
+            if (networkStatusText) networkStatusText.textContent = 'Config Needed';
             return false;
         }
 
         try {
             supabase = window.supabase.createClient(config.url, config.anonKey);
-            if (peerStatusBadge) peerStatusBadge.classList.add('connected');
-            if (peerStatusText) peerStatusText.textContent = 'Network Ready';
+            if (networkStatusBadge) networkStatusBadge.classList.add('connected');
+            if (networkStatusText) networkStatusText.textContent = 'Network Ready';
             return true;
         } catch (err) {
             console.error('Supabase init error:', err);
-            if (peerStatusBadge) peerStatusBadge.classList.remove('connected');
-            if (peerStatusText) peerStatusText.textContent = 'Network Error';
+            if (networkStatusBadge) networkStatusBadge.classList.remove('connected');
+            if (networkStatusText) networkStatusText.textContent = 'Network Error';
             return false;
         }
     }
