@@ -1,10 +1,9 @@
 /**
  * Tic Tac Toe - Minimalist English Logic (Random First Turn & Alternating Rematches)
+ * Supabase Realtime (WebSockets) Multiplayer Engine
  */
 
 document.addEventListener('DOMContentLoaded', () => {
-    const PEER_PREFIX = 'ttt-v1-';
-
     const SVG_X = `<svg class="cell-svg x-svg" viewBox="0 0 24 24" fill="none" stroke="var(--color-x)" stroke-width="2.5" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>`;
     const SVG_O = `<svg class="cell-svg o-svg" viewBox="0 0 24 24" fill="none" stroke="var(--color-o)" stroke-width="2.5" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/></svg>`;
 
@@ -18,8 +17,8 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentMode = 'local';
 
     // Game Engine State
-    let peer = null;
-    let conn = null;
+    let supabase = null;
+    let gameChannel = null;
     let myRole = null; // 'host' (X) or 'joiner' (O)
     let mySymbol = 'X';
     let currentTurn = 'X';
@@ -101,15 +100,14 @@ document.addEventListener('DOMContentLoaded', () => {
     // MENU NAVIGATION LOGIC
     // ==========================================
 
-    btnSelectLocal.addEventListener('click', () => {
+    btnSelectLocal.addEventListener('click', async () => {
         currentMode = 'local';
         modeTag.textContent = 'LOCAL';
         reactionsBar.classList.add('hidden');
         if (hostInviteBar) hostInviteBar.classList.add('hidden');
         isCodeRevealed = false;
 
-        if (conn) { conn.close(); conn = null; }
-        if (peer) { peer.destroy(); peer = null; }
+        await leaveSupabaseRoom();
         hasActiveSession = false;
         isOpponentConnected = false;
         lastWinner = null;
@@ -127,9 +125,9 @@ document.addEventListener('DOMContentLoaded', () => {
         if (hostInviteBar) hostInviteBar.classList.add('hidden');
         isCodeRevealed = false;
 
-        if (!peer || peer.destroyed) initPeer();
+        initSupabase();
 
-        if (conn && conn.open) {
+        if (hasActiveSession && isOpponentConnected) {
             showScreen(screenGame);
         } else {
             showScreen(screenOnlineLobby);
@@ -149,11 +147,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function leaveToMainMenu() {
+    async function leaveToMainMenu() {
         clearJoinTimeout();
         clearUrlRoomParam();
-        if (conn) { conn.close(); conn = null; }
-        if (peer) { peer.destroy(); peer = null; }
+        await leaveSupabaseRoom();
         hasActiveSession = false;
         isOpponentConnected = false;
         lastWinner = null;
@@ -171,281 +168,187 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     // ==========================================
-    // PEERJS NETWORK SETUP
+    // SUPABASE REALTIME NETWORK SETUP
     // ==========================================
 
-    const PEER_CONFIG = {
-        debug: 1,
-        config: {
-            iceServers: [
-                { urls: 'stun:stun.l.google.com:19302' },
-                { urls: 'stun:stun1.l.google.com:19302' },
-                { urls: 'stun:openrelay.metered.ca:80' },
-                {
-                    urls: 'turn:openrelay.metered.ca:80',
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                },
-                {
-                    urls: 'turn:openrelay.metered.ca:443',
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                },
-                {
-                    urls: 'turn:openrelay.metered.ca:443?transport=tcp',
-                    username: 'openrelayproject',
-                    credential: 'openrelayproject'
-                }
-            ]
+    function initSupabase() {
+        if (supabase) return true;
+
+        if (typeof window.supabase === 'undefined' || !window.supabase.createClient) {
+            if (peerStatusBadge) peerStatusBadge.classList.remove('connected');
+            if (peerStatusText) peerStatusText.textContent = 'Connecting...';
+            return false;
         }
-    };
 
-    function initPeer() {
-        if (peer && !peer.destroyed) return;
+        const config = window.SUPABASE_CONFIG;
+        if (!config || !config.url || !config.anonKey || config.url.includes('YOUR_PROJECT_ID')) {
+            if (peerStatusBadge) peerStatusBadge.classList.remove('connected');
+            if (peerStatusText) peerStatusText.textContent = 'Config Needed';
+            return false;
+        }
 
-        peer = new Peer(PEER_CONFIG);
-
-        peer.on('open', () => {
-            peerStatusBadge.classList.add('connected');
-            peerStatusText.textContent = 'Network Ready';
-            if (pendingJoinRoom) {
-                const code = pendingJoinRoom;
-                pendingJoinRoom = null;
-                joinOnlineRoom(code);
-            }
-        });
-
-        peer.on('error', (err) => {
-            console.error('Peer error:', err);
-            peerStatusBadge.classList.remove('connected');
-            clearJoinTimeout();
-            if (err.type === 'peer-unavailable') {
-                pendingJoinRoom = null;
-                clearUrlRoomParam();
-                showToast('Room not found or expired.');
-                showScreen(screenOnlineLobby);
-            } else {
-                showToast('Network error');
-            }
-        });
-
-        peer.on('disconnected', () => {
-            peerStatusBadge.classList.remove('connected');
-            peerStatusText.textContent = 'Connecting...';
-            peer.reconnect();
-        });
-    }
-
-    function checkUrlRoomParam() {
-        const urlParams = new URLSearchParams(window.location.search);
-        const room = urlParams.get('room');
-        if (room && room.length === 6) {
-            const code = room.toUpperCase();
-            currentMode = 'online';
-            modeTag.textContent = 'ONLINE';
-            reactionsBar.classList.remove('hidden');
-            inputRoomCode.value = code;
-            joinOnlineRoom(code);
+        try {
+            supabase = window.supabase.createClient(config.url, config.anonKey);
+            if (peerStatusBadge) peerStatusBadge.classList.add('connected');
+            if (peerStatusText) peerStatusText.textContent = 'Network Ready';
             return true;
+        } catch (err) {
+            console.error('Supabase init error:', err);
+            if (peerStatusBadge) peerStatusBadge.classList.remove('connected');
+            if (peerStatusText) peerStatusText.textContent = 'Network Error';
+            return false;
         }
-        return false;
     }
 
-    function showConnectingScreen(code) {
-        if (waitingTitle) waitingTitle.textContent = `Connecting to ${code}...`;
-        if (waitingCodeBox) waitingCodeBox.classList.add('hidden');
-        if (btnCopyLink) btnCopyLink.classList.add('hidden');
-        showScreen(screenWaiting);
-    }
-
-    function generateCode() {
-        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-        let res = '';
-        for (let i = 0; i < 6; i++) res += chars.charAt(Math.floor(Math.random() * chars.length));
-        return res;
-    }
-
-    btnCreateRoom.addEventListener('click', () => {
-        if (!peer || peer.disconnected) {
-            showToast('Connecting to network...');
-            if (!peer || peer.destroyed) initPeer();
-            return;
-        }
-
-        roomCode = generateCode();
-        myRole = 'host';
-        mySymbol = 'X';
-        hasActiveSession = false;
-        isOpponentConnected = false;
-        lastWinner = null;
-        lastWinCombo = null;
-        isCodeRevealed = false;
-        scores = { X: 0, O: 0, draw: 0 };
-        updateScoresUI();
-        updateCodePeekUI();
-
-        if (peer) peer.destroy();
-        peer = new Peer(PEER_PREFIX + roomCode, PEER_CONFIG);
-
-        peer.on('open', () => {
-            displayRoomCode.textContent = roomCode;
-            if (waitingTitle) waitingTitle.textContent = 'Waiting for Opponent...';
-            if (waitingCodeBox) waitingCodeBox.classList.remove('hidden');
-            if (btnCopyLink) btnCopyLink.classList.remove('hidden');
-            showScreen(screenWaiting);
-
-            peer.on('connection', (connection) => {
-                conn = connection;
-                setupConnection();
-            });
-        });
-
-        peer.on('error', () => {
-            showToast('Failed to create room.');
-            initPeer();
-            showScreen(screenOnlineLobby);
-        });
-    });
-
-    btnJoinRoom.addEventListener('click', () => {
-        const code = inputRoomCode.value.trim().toUpperCase();
-        if (code.length !== 6) {
-            showToast('Enter valid 6-character code');
-            return;
-        }
-        joinOnlineRoom(code);
-    });
-
-    inputRoomCode.addEventListener('keyup', (e) => {
-        if (e.key === 'Enter') btnJoinRoom.click();
-    });
-
-    function joinOnlineRoom(code) {
-        roomCode = code;
-        myRole = 'joiner';
-        mySymbol = 'O';
-        scores = { X: 0, O: 0, draw: 0 };
-        updateScoresUI();
-
-        showConnectingScreen(code);
-
+    async function leaveSupabaseRoom() {
         clearJoinTimeout();
-        joinTimeout = setTimeout(() => {
-            if (myRole === 'joiner' && !isOpponentConnected) {
-                showToast('Connection timed out. Room may not exist.');
-                clearUrlRoomParam();
-                if (conn) {
-                    conn.close();
-                    conn = null;
-                }
-                showScreen(screenOnlineLobby);
+        if (gameChannel && supabase) {
+            try {
+                await gameChannel.untrack();
+                await supabase.removeChannel(gameChannel);
+            } catch (err) {
+                console.warn('Error closing channel:', err);
             }
-        }, 18000);
-
-        if (!peer || peer.destroyed || !peer.open) {
-            pendingJoinRoom = code;
-            if (!peer || peer.destroyed) {
-                initPeer();
-            }
-            return;
+            gameChannel = null;
         }
-
-        if (conn) {
-            conn.close();
-            conn = null;
-        }
-
-        conn = peer.connect(PEER_PREFIX + roomCode);
-        setupConnection();
     }
 
-    function setupConnection() {
-        if (!conn) return;
+    async function setupSupabaseRoom(code) {
+        await leaveSupabaseRoom();
 
-        let isReady = false;
-        const handleOpen = () => {
-            if (isReady) return;
-            isReady = true;
-            clearJoinTimeout();
-            isOpponentConnected = true;
-
-            if (myRole === 'host') {
-                if (!hasActiveSession) {
-                    hasActiveSession = true;
-                    startingSymbol = 'X';
-
-                    sendData({
-                        type: 'INIT_GAME',
-                        scores: scores,
-                        startingSymbol: startingSymbol
-                    });
-                    startOnlineGame();
-                    showToast('Player 2 connected!');
-                } else {
-                    sendData({
-                        type: 'SYNC_GAME',
-                        scores: scores,
-                        startingSymbol: startingSymbol,
-                        boardState: boardState,
-                        currentTurn: currentTurn,
-                        isGameActive: isGameActive,
-                        lastWinner: lastWinner,
-                        lastWinCombo: lastWinCombo
-                    });
-                    if (isGameActive) {
-                        updateTurnUI();
-                        btnRestart.classList.add('hidden');
-                    } else {
-                        setRestartButtonState('restart', 'New Game');
-                    }
-                    showToast('Player 2 reconnected!');
-                }
-            } else if (myRole === 'joiner') {
-                showToast('Connected to room!');
+        const channelName = `game-${code}`;
+        gameChannel = supabase.channel(channelName, {
+            config: {
+                broadcast: { ack: false, self: false },
+                presence: { key: myRole }
             }
-        };
+        });
 
-        if (conn.open) {
-            handleOpen();
-        } else {
-            conn.on('open', handleOpen);
+        // Broadcast message handler
+        gameChannel.on('broadcast', { event: 'game-event' }, ({ payload }) => {
+            handleData(payload);
+        });
+
+        // Presence state handler (Detects opponent join / leave)
+        gameChannel
+            .on('presence', { event: 'sync' }, () => {
+                const state = gameChannel.presenceState();
+                const opponentRole = myRole === 'host' ? 'joiner' : 'host';
+                const hasOpponent = Boolean(state[opponentRole] && state[opponentRole].length > 0);
+
+                if (hasOpponent && !isOpponentConnected) {
+                    onOpponentConnected();
+                }
+            })
+            .on('presence', { event: 'join' }, ({ key }) => {
+                const opponentRole = myRole === 'host' ? 'joiner' : 'host';
+                if (key === opponentRole && !isOpponentConnected) {
+                    onOpponentConnected();
+                }
+            })
+            .on('presence', { event: 'leave' }, ({ key }) => {
+                const opponentRole = myRole === 'host' ? 'joiner' : 'host';
+                if (key === opponentRole) {
+                    clearJoinTimeout();
+                    isOpponentConnected = false;
+                    showToast('Opponent disconnected');
+                    statusText.textContent = 'Opponent Left';
+                    statusIcon.innerHTML = '⚠️';
+                    setRestartButtonState('exit', 'Back to Menu');
+                    btnRestart.classList.remove('hidden');
+                }
+            });
+
+        // Subscribe to channel
+        gameChannel.subscribe(async (status) => {
+            if (status === 'SUBSCRIBED') {
+                await gameChannel.track({
+                    role: myRole,
+                    joinedAt: Date.now()
+                });
+
+                // If joiner, announce presence to host
+                if (myRole === 'joiner') {
+                    sendData({ type: 'JOINER_HELLO' });
+                }
+            } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+                console.error('Channel subscription status:', status);
+                showToast('Network error connecting to room.');
+            }
+        });
+    }
+
+    function onOpponentConnected() {
+        clearJoinTimeout();
+        isOpponentConnected = true;
+
+        if (myRole === 'host') {
+            if (!hasActiveSession) {
+                hasActiveSession = true;
+                startingSymbol = 'X';
+                sendData({
+                    type: 'INIT_GAME',
+                    scores: scores,
+                    startingSymbol: startingSymbol
+                });
+                startOnlineGame();
+                showToast('Player 2 connected!');
+            } else {
+                sendData({
+                    type: 'SYNC_GAME',
+                    scores: scores,
+                    startingSymbol: startingSymbol,
+                    boardState: boardState,
+                    currentTurn: currentTurn,
+                    isGameActive: isGameActive,
+                    lastWinner: lastWinner,
+                    lastWinCombo: lastWinCombo
+                });
+                if (isGameActive) {
+                    updateTurnUI();
+                    btnRestart.classList.add('hidden');
+                } else {
+                    setRestartButtonState('restart', 'New Game');
+                }
+                showToast('Player 2 reconnected!');
+            }
         }
-
-        conn.on('data', (data) => handleData(data));
-        conn.on('close', () => {
-            clearJoinTimeout();
-            isOpponentConnected = false;
-            showToast('Opponent disconnected');
-            statusText.textContent = 'Opponent Left';
-            statusIcon.innerHTML = '⚠️';
-            setRestartButtonState('exit', 'Back to Menu');
-            btnRestart.classList.remove('hidden');
-        });
-        conn.on('error', (err) => {
-            console.error('Data connection error:', err);
-            clearJoinTimeout();
-            isOpponentConnected = false;
-        });
     }
 
     function sendData(data) {
-        if (conn && conn.open) conn.send(data);
+        if (gameChannel) {
+            gameChannel.send({
+                type: 'broadcast',
+                event: 'game-event',
+                payload: data
+            }).catch(err => {
+                console.error('Send error:', err);
+            });
+        }
     }
 
     function handleData(data) {
         if (!data || typeof data !== 'object') return;
 
         switch (data.type) {
+            case 'JOINER_HELLO':
+                if (myRole === 'host') {
+                    onOpponentConnected();
+                }
+                break;
             case 'INIT_GAME':
                 hasActiveSession = true;
                 isOpponentConnected = true;
+                clearJoinTimeout();
                 if (data.scores) scores = data.scores;
                 if (data.startingSymbol) startingSymbol = data.startingSymbol;
                 startOnlineGame();
+                showToast('Connected to room!');
                 break;
             case 'SYNC_GAME':
                 hasActiveSession = true;
                 isOpponentConnected = true;
+                clearJoinTimeout();
                 if (data.scores) scores = data.scores;
                 if (data.startingSymbol) startingSymbol = data.startingSymbol;
                 boardState = data.boardState ? [...data.boardState] : Array(9).fill(null);
@@ -506,6 +409,113 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 break;
         }
+    }
+
+    function checkUrlRoomParam() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const room = urlParams.get('room');
+        if (room && room.length === 6) {
+            const code = room.toUpperCase();
+            currentMode = 'online';
+            modeTag.textContent = 'ONLINE';
+            reactionsBar.classList.remove('hidden');
+            inputRoomCode.value = code;
+            joinOnlineRoom(code);
+            return true;
+        }
+        return false;
+    }
+
+    function showConnectingScreen(code) {
+        if (waitingTitle) waitingTitle.textContent = `Connecting to ${code}...`;
+        if (waitingCodeBox) waitingCodeBox.classList.add('hidden');
+        if (btnCopyLink) btnCopyLink.classList.add('hidden');
+        showScreen(screenWaiting);
+    }
+
+    function generateCode() {
+        const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+        let res = '';
+        for (let i = 0; i < 6; i++) res += chars.charAt(Math.floor(Math.random() * chars.length));
+        return res;
+    }
+
+    btnCreateRoom.addEventListener('click', async () => {
+        if (!initSupabase()) {
+            if (typeof window.supabase === 'undefined') {
+                showToast('Connecting to network...');
+                setTimeout(() => btnCreateRoom.click(), 300);
+                return;
+            }
+            showToast('Please check config.js');
+            return;
+        }
+
+        roomCode = generateCode();
+        myRole = 'host';
+        mySymbol = 'X';
+        hasActiveSession = false;
+        isOpponentConnected = false;
+        lastWinner = null;
+        lastWinCombo = null;
+        isCodeRevealed = false;
+        scores = { X: 0, O: 0, draw: 0 };
+        updateScoresUI();
+        updateCodePeekUI();
+
+        displayRoomCode.textContent = roomCode;
+        if (waitingTitle) waitingTitle.textContent = 'Waiting for Opponent...';
+        if (waitingCodeBox) waitingCodeBox.classList.remove('hidden');
+        if (btnCopyLink) btnCopyLink.classList.remove('hidden');
+        showScreen(screenWaiting);
+
+        await setupSupabaseRoom(roomCode);
+    });
+
+    btnJoinRoom.addEventListener('click', () => {
+        const code = inputRoomCode.value.trim().toUpperCase();
+        if (code.length !== 6) {
+            showToast('Enter valid 6-character code');
+            return;
+        }
+        joinOnlineRoom(code);
+    });
+
+    inputRoomCode.addEventListener('keyup', (e) => {
+        if (e.key === 'Enter') btnJoinRoom.click();
+    });
+
+    async function joinOnlineRoom(code) {
+        if (!initSupabase()) {
+            if (typeof window.supabase === 'undefined') {
+                showConnectingScreen(code);
+                setTimeout(() => joinOnlineRoom(code), 300);
+                return;
+            }
+            showToast('Please check config.js');
+            showScreen(screenOnlineLobby);
+            return;
+        }
+
+        roomCode = code;
+        myRole = 'joiner';
+        mySymbol = 'O';
+        scores = { X: 0, O: 0, draw: 0 };
+        updateScoresUI();
+
+        showConnectingScreen(code);
+
+        clearJoinTimeout();
+        joinTimeout = setTimeout(() => {
+            if (myRole === 'joiner' && !isOpponentConnected) {
+                showToast('Connection timed out. Room may not exist.');
+                clearUrlRoomParam();
+                leaveSupabaseRoom();
+                showScreen(screenOnlineLobby);
+            }
+        }, 12000);
+
+        await setupSupabaseRoom(code);
     }
 
     function setRestartButtonState(mode, text = null) {
@@ -608,14 +618,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
     function resetGameLocal() {
         scores = { X: 0, O: 0, draw: 0 };
-        // First game always starts with X (Player 1)
         startingSymbol = 'X';
         resetBoard();
         updateScoresUI();
     }
 
     function prepareNextRoundTurn() {
-        // Subsequent rounds alternate starting player (X -> O -> X -> O)
         startingSymbol = startingSymbol === 'X' ? 'O' : 'X';
         currentTurn = startingSymbol;
     }
@@ -636,7 +644,6 @@ document.addEventListener('DOMContentLoaded', () => {
             cell.removeAttribute('disabled');
         });
 
-        // Set turn for current round
         currentTurn = startingSymbol;
         updateTurnUI();
     }
@@ -648,7 +655,7 @@ document.addEventListener('DOMContentLoaded', () => {
             if (!isGameActive || boardState[index] !== null) return;
 
             if (currentMode === 'online') {
-                if (!conn || !conn.open || !isOpponentConnected) {
+                if (!gameChannel || !isOpponentConnected) {
                     showToast("Opponent is disconnected!");
                     return;
                 }
@@ -749,7 +756,7 @@ document.addEventListener('DOMContentLoaded', () => {
             prepareNextRoundTurn();
             resetBoard();
         } else {
-            if (!conn || !conn.open || !isOpponentConnected) {
+            if (!gameChannel || !isOpponentConnected) {
                 leaveToMainMenu();
                 return;
             }
@@ -760,7 +767,6 @@ document.addEventListener('DOMContentLoaded', () => {
             sendData({ type: 'REMATCH_REQUEST' });
 
             if (rematchRequested.opponent && myRole === 'host') {
-                // Host is authority: alternates starting symbol and confirms rematch
                 prepareNextRoundTurn();
                 sendData({
                     type: 'REMATCH_ACCEPT',
@@ -791,7 +797,6 @@ document.addEventListener('DOMContentLoaded', () => {
         elem.className = 'floating-emoji';
         elem.textContent = emoji;
 
-        // Position at the bottom of the screen, with a generous spread out to the sides
         const centerX = window.innerWidth / 2;
         const maxSpread = Math.min(window.innerWidth * 0.8, 720);
         const spreadX = (Math.random() - 0.5) * maxSpread;
@@ -941,6 +946,7 @@ document.addEventListener('DOMContentLoaded', () => {
         } catch (e) {}
     }
 
+    // Initial check for direct URL join
     const hasRoomParam = checkUrlRoomParam();
     if (!hasRoomParam) {
         showScreen(screenMenu);

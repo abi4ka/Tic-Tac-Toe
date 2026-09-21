@@ -5,7 +5,7 @@ A minimalist, responsive web application for playing Tic-Tac-Toe locally on a si
 ## Features
 
 - **Dual Game Modes**: Supports both Local 2-Player (Pass & Play on one screen) and Online P2P Multiplayer (across two separate devices).
-- **Serverless Online Multiplayer**: Connects players directly using WebRTC via PeerJS. No backend server or database is required.
+- **Serverless Online Multiplayer**: Connects players reliably across any network (mobile 4G/5G, Wi-Fi) via Supabase Realtime (WebSockets). No custom backend or database required.
 - **Direct Link Sharing**: Room creation generates a 6-character room code and a direct join URL (`?room=CODE`).
 - **Minimalist Interface**: Clean, icon-driven user interface with zero clutter and inline match status updates.
 - **Pure Static Architecture**: Runs completely in the browser, making it ideal for hosting on static services like GitHub Pages.
@@ -14,7 +14,7 @@ A minimalist, responsive web application for playing Tic-Tac-Toe locally on a si
 
 - **Frontend**: HTML5, Vanilla CSS3 (CSS Variables, Flexbox, Responsive Grid)
 - **Programming Language**: JavaScript (ES6+)
-- **Networking**: PeerJS (WebRTC DataChannel API)
+- **Networking**: Supabase Realtime (WebSockets via Broadcast & Presence)
 - **Audio**: Web Audio API (synthesized move and match sounds)
 
 ## Local Development
