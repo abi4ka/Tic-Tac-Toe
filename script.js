@@ -363,14 +363,32 @@ document.addEventListener('DOMContentLoaded', () => {
                     lastWinner: lastWinner,
                     lastWinCombo: lastWinCombo
                 });
-                if (isGameActive) {
-                    updateTurnUI();
-                    btnRestart.classList.add('hidden');
-                } else {
-                    setRestartButtonState('restart', 'New Game');
-                }
+                // The synced joiner starts without a pending rematch request
+                rematchRequested.opponent = false;
+                refreshOnlineGameUI();
                 showToast('Player 2 reconnected!');
             }
+        } else if (hasActiveSession) {
+            refreshOnlineGameUI();
+            showToast('Opponent reconnected!');
+        }
+    }
+
+    // Restores the turn / result display after the opponent comes back mid-session
+    function refreshOnlineGameUI() {
+        if (isGameActive) {
+            updateTurnUI();
+            btnRestart.classList.add('hidden');
+        } else {
+            if (lastWinner) renderGameEndUI(lastWinner, lastWinCombo);
+            if (rematchRequested.me) {
+                setRestartButtonState('restart', 'Waiting...');
+            } else if (rematchRequested.opponent) {
+                setRestartButtonState('restart', 'Accept Rematch');
+            } else {
+                setRestartButtonState('restart', 'New Game');
+            }
+            btnRestart.classList.remove('hidden');
         }
     }
 
@@ -511,6 +529,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 break;
             case 'REMATCH_REQUEST':
+                if (isGameActive) break;
                 rematchRequested.opponent = true;
                 if (rematchRequested.me) {
                     if (myRole === 'host') {
@@ -903,7 +922,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 leaveToMainMenu();
                 return;
             }
-            if (rematchRequested.me) return;
+            if (isGameActive || rematchRequested.me) return;
 
             rematchRequested.me = true;
             setRestartButtonState('restart', 'Waiting...');
