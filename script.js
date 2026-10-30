@@ -448,12 +448,11 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (!isOpponentConnected) {
                     opponentId = data.from;
                     onOpponentConnected();
-                } else if (data.from === opponentId) {
-                    onOpponentConnected();
-                } else {
+                } else if (data.from !== opponentId) {
                     rejectedClients.add(data.from);
                     sendData({ type: 'ROOM_FULL' }, data.from);
                 }
+                // A hello from the already connected opponent (e.g. after presence) is ignored
                 break;
             case 'ROOM_FULL':
                 if (myRole !== 'joiner' || hasActiveSession) break;
