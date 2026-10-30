@@ -1,5 +1,5 @@
 /**
- * Tic Tac Toe - Minimalist English Logic (Random First Turn & Alternating Rematches)
+ * Tic Tac Toe - Minimalist English Logic (X Starts First & Alternating Rematches)
  * Supabase Realtime (WebSockets) Multiplayer Engine
  */
 
