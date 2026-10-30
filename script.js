@@ -37,6 +37,11 @@ document.addEventListener('DOMContentLoaded', () => {
     let rematchRequested = { me: false, opponent: false };
     let joinTimeout = null;
 
+    // Room membership: unique id per page load, the single admitted opponent, rejected extra joiners
+    const clientId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+    let opponentId = null;
+    const rejectedClients = new Set();
+
     const WINNING_COMBOS = [
         [0, 1, 2], [3, 4, 5], [6, 7, 8],
         [0, 3, 6], [1, 4, 7], [2, 5, 8],
@@ -215,42 +220,62 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function setupSupabaseRoom(code) {
         await leaveSupabaseRoom();
+        opponentId = null;
+        rejectedClients.clear();
 
         const channelName = `game-${code}`;
-        gameChannel = supabase.channel(channelName, {
+        const channel = supabase.channel(channelName, {
             config: {
                 broadcast: { ack: false, self: false },
-                presence: { key: myRole }
+                presence: { key: clientId }
             }
         });
+        gameChannel = channel;
 
         // Broadcast message handler
-        gameChannel.on('broadcast', { event: 'game-event' }, ({ payload }) => {
+        channel.on('broadcast', { event: 'game-event' }, ({ payload }) => {
+            if (channel !== gameChannel) return;
             handleData(payload);
         });
 
-        // Presence state handler (Detects opponent join / leave)
-        gameChannel
+        // Presence state handler (Detects opponent join / leave, admits only one opponent)
+        channel
             .on('presence', { event: 'sync' }, () => {
-                const state = gameChannel.presenceState();
-                const opponentRole = myRole === 'host' ? 'joiner' : 'host';
-                const hasOpponent = Boolean(state[opponentRole] && state[opponentRole].length > 0);
+                if (channel !== gameChannel) return;
+                const others = Object.values(channel.presenceState())
+                    .flat()
+                    .filter(p => p && typeof p.clientId === 'string' && p.clientId !== clientId);
 
-                if (hasOpponent && !isOpponentConnected) {
-                    onOpponentConnected();
+                if (myRole === 'host') {
+                    const joiners = others
+                        .filter(p => p.role === 'joiner')
+                        .sort((a, b) => a.joinedAt - b.joinedAt);
+
+                    if (!isOpponentConnected && joiners.length > 0) {
+                        opponentId = joiners[0].clientId;
+                        onOpponentConnected();
+                    }
+
+                    joiners.forEach(p => {
+                        if (p.clientId !== opponentId && !rejectedClients.has(p.clientId)) {
+                            rejectedClients.add(p.clientId);
+                            sendData({ type: 'ROOM_FULL' }, p.clientId);
+                        }
+                    });
+                } else {
+                    const host = others.find(p => p.role === 'host');
+                    if (host && !isOpponentConnected) {
+                        opponentId = host.clientId;
+                        onOpponentConnected();
+                    }
                 }
             })
-            .on('presence', { event: 'join' }, ({ key }) => {
-                const opponentRole = myRole === 'host' ? 'joiner' : 'host';
-                if (key === opponentRole && !isOpponentConnected) {
-                    onOpponentConnected();
-                }
-            })
-            .on('presence', { event: 'leave' }, ({ key }) => {
-                const opponentRole = myRole === 'host' ? 'joiner' : 'host';
-                if (key === opponentRole) {
+            .on('presence', { event: 'leave' }, ({ key, currentPresences }) => {
+                if (channel !== gameChannel) return;
+                if (key === opponentId && isOpponentConnected && currentPresences.length === 0) {
                     clearJoinTimeout();
                     isOpponentConnected = false;
+                    if (myRole === 'host') opponentId = null;
                     showToast('Opponent disconnected');
                     statusText.textContent = 'Opponent Left';
                     statusIcon.innerHTML = '⚠️';
@@ -260,10 +285,12 @@ document.addEventListener('DOMContentLoaded', () => {
             });
 
         // Subscribe to channel
-        gameChannel.subscribe(async (status) => {
+        channel.subscribe(async (status) => {
+            if (channel !== gameChannel) return;
             if (status === 'SUBSCRIBED') {
-                await gameChannel.track({
+                await channel.track({
                     role: myRole,
+                    clientId: clientId,
                     joinedAt: Date.now()
                 });
 
@@ -315,12 +342,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function sendData(data) {
+    function sendData(data, targetId = opponentId) {
         if (gameChannel) {
             gameChannel.send({
                 type: 'broadcast',
                 event: 'game-event',
-                payload: data
+                payload: { ...data, from: clientId, to: targetId }
             }).catch(err => {
                 console.error('Send error:', err);
             });
@@ -346,17 +373,44 @@ document.addEventListener('DOMContentLoaded', () => {
             WINNING_COMBOS.some(combo => combo.every((v, i) => v === value[i]));
     }
 
+    function isFromOpponent(data) {
+        if (myRole === 'host') {
+            // Any joiner may ask to join; everything else must come from the admitted opponent
+            if (data.type === 'JOINER_HELLO') return typeof data.from === 'string';
+            return Boolean(opponentId) && data.from === opponentId;
+        }
+        // Joiner only listens to messages addressed to this client
+        if (data.to !== clientId) return false;
+        if (data.type === 'INIT_GAME' || data.type === 'SYNC_GAME' || data.type === 'ROOM_FULL') return true;
+        return Boolean(opponentId) && data.from === opponentId;
+    }
+
     function handleData(data) {
         if (!data || typeof data !== 'object') return;
+        if (!isFromOpponent(data)) return;
 
         // Opponent may only move its own symbol; game state messages come from the host (authoritative)
         const opponentSymbol = mySymbol === 'X' ? 'O' : 'X';
 
         switch (data.type) {
             case 'JOINER_HELLO':
-                if (myRole === 'host') {
+                if (myRole !== 'host') break;
+                if (!isOpponentConnected) {
+                    opponentId = data.from;
                     onOpponentConnected();
+                } else if (data.from === opponentId) {
+                    onOpponentConnected();
+                } else {
+                    rejectedClients.add(data.from);
+                    sendData({ type: 'ROOM_FULL' }, data.from);
                 }
+                break;
+            case 'ROOM_FULL':
+                if (myRole !== 'joiner' || hasActiveSession) break;
+                showToast('Room is full');
+                clearUrlRoomParam();
+                leaveSupabaseRoom();
+                showScreen(screenOnlineLobby);
                 break;
             case 'INIT_GAME':
                 if (
@@ -367,6 +421,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 hasActiveSession = true;
                 isOpponentConnected = true;
+                opponentId = data.from;
                 clearJoinTimeout();
                 scores = { X: data.scores.X, O: data.scores.O, draw: data.scores.draw };
                 startingSymbol = data.startingSymbol;
@@ -387,6 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
                 hasActiveSession = true;
                 isOpponentConnected = true;
+                opponentId = data.from;
                 clearJoinTimeout();
                 scores = { X: data.scores.X, O: data.scores.O, draw: data.scores.draw };
                 startingSymbol = data.startingSymbol;
