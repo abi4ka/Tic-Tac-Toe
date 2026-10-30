@@ -327,8 +327,30 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    function isValidSymbol(value) {
+        return value === 'X' || value === 'O';
+    }
+
+    function isValidScores(value) {
+        return Boolean(value) && typeof value === 'object' &&
+            ['X', 'O', 'draw'].every(key => Number.isInteger(value[key]) && value[key] >= 0);
+    }
+
+    function isValidBoard(value) {
+        return Array.isArray(value) && value.length === 9 &&
+            value.every(c => c === null || isValidSymbol(c));
+    }
+
+    function isValidWinCombo(value) {
+        return Array.isArray(value) &&
+            WINNING_COMBOS.some(combo => combo.every((v, i) => v === value[i]));
+    }
+
     function handleData(data) {
         if (!data || typeof data !== 'object') return;
+
+        // Opponent may only move its own symbol; game state messages come from the host (authoritative)
+        const opponentSymbol = mySymbol === 'X' ? 'O' : 'X';
 
         switch (data.type) {
             case 'JOINER_HELLO':
@@ -337,25 +359,42 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 break;
             case 'INIT_GAME':
+                if (
+                    myRole !== 'joiner' ||
+                    !isValidScores(data.scores) ||
+                    !isValidSymbol(data.startingSymbol)
+                ) break;
+
                 hasActiveSession = true;
                 isOpponentConnected = true;
                 clearJoinTimeout();
-                if (data.scores) scores = data.scores;
-                if (data.startingSymbol) startingSymbol = data.startingSymbol;
+                scores = { X: data.scores.X, O: data.scores.O, draw: data.scores.draw };
+                startingSymbol = data.startingSymbol;
                 startOnlineGame();
                 showToast('Connected to room!');
                 break;
             case 'SYNC_GAME':
+                if (
+                    myRole !== 'joiner' ||
+                    !isValidScores(data.scores) ||
+                    !isValidSymbol(data.startingSymbol) ||
+                    !isValidBoard(data.boardState) ||
+                    !isValidSymbol(data.currentTurn) ||
+                    typeof data.isGameActive !== 'boolean' ||
+                    !(data.lastWinner === null || data.lastWinner === 'draw' || isValidSymbol(data.lastWinner)) ||
+                    !(data.lastWinCombo === null || isValidWinCombo(data.lastWinCombo))
+                ) break;
+
                 hasActiveSession = true;
                 isOpponentConnected = true;
                 clearJoinTimeout();
-                if (data.scores) scores = data.scores;
-                if (data.startingSymbol) startingSymbol = data.startingSymbol;
-                boardState = data.boardState ? [...data.boardState] : Array(9).fill(null);
-                currentTurn = data.currentTurn || 'X';
+                scores = { X: data.scores.X, O: data.scores.O, draw: data.scores.draw };
+                startingSymbol = data.startingSymbol;
+                boardState = [...data.boardState];
+                currentTurn = data.currentTurn;
                 isGameActive = data.isGameActive;
                 lastWinner = data.lastWinner;
-                lastWinCombo = data.lastWinCombo;
+                lastWinCombo = data.lastWinCombo ? [...data.lastWinCombo] : null;
 
                 showScreen(screenGame);
                 updatePlayerIdentityUI();
@@ -376,6 +415,7 @@ document.addEventListener('DOMContentLoaded', () => {
                     data.index >= 0 &&
                     data.index < 9 &&
                     boardState[data.index] === null &&
+                    data.symbol === opponentSymbol &&
                     data.symbol === currentTurn
                 ) {
                     applyMove(data.index, data.symbol);
@@ -400,7 +440,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 }
                 break;
             case 'REMATCH_ACCEPT':
-                if (data.startingSymbol) startingSymbol = data.startingSymbol;
+                if (myRole !== 'joiner' || !isValidSymbol(data.startingSymbol)) break;
+                startingSymbol = data.startingSymbol;
                 resetBoard();
                 break;
             case 'EMOJI':
