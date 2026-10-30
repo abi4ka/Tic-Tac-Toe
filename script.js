@@ -36,6 +36,9 @@ document.addEventListener('DOMContentLoaded', () => {
     let scores = { X: 0, O: 0, draw: 0 };
     let rematchRequested = { me: false, opponent: false };
     let joinTimeout = null;
+    let networkRetryTimer = null;
+    let networkRetryCount = 0;
+    const NETWORK_RETRY_LIMIT = 5;
 
     // Room membership: unique id per page load, the single admitted opponent, rejected extra joiners
     const clientId = Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
@@ -154,6 +157,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function leaveToMainMenu() {
         clearJoinTimeout();
+        clearNetworkRetry();
         clearUrlRoomParam();
         await leaveSupabaseRoom();
         hasActiveSession = false;
@@ -203,6 +207,34 @@ document.addEventListener('DOMContentLoaded', () => {
             if (networkStatusText) networkStatusText.textContent = 'Network Error';
             return false;
         }
+    }
+
+    // Retries while the Supabase library is still loading, gives up if the CDN failed
+    function scheduleNetworkRetry(retry) {
+        if (networkRetryCount >= NETWORK_RETRY_LIMIT) {
+            clearNetworkRetry();
+            return false;
+        }
+        networkRetryCount++;
+        networkRetryTimer = setTimeout(() => {
+            networkRetryTimer = null;
+            retry();
+        }, 300);
+        return true;
+    }
+
+    function clearNetworkRetry() {
+        if (networkRetryTimer) {
+            clearTimeout(networkRetryTimer);
+            networkRetryTimer = null;
+        }
+        networkRetryCount = 0;
+    }
+
+    function showNetworkUnavailable() {
+        if (networkStatusBadge) networkStatusBadge.classList.remove('connected');
+        if (networkStatusText) networkStatusText.textContent = 'Network Unavailable';
+        showToast('Could not load network. Check your connection and reload.');
     }
 
     async function leaveSupabaseRoom() {
@@ -537,11 +569,16 @@ document.addEventListener('DOMContentLoaded', () => {
         return res;
     }
 
-    btnCreateRoom.addEventListener('click', async () => {
+    btnCreateRoom.addEventListener('click', () => {
+        clearNetworkRetry();
+        createOnlineRoom();
+    });
+
+    async function createOnlineRoom() {
         if (!initSupabase()) {
             if (typeof window.supabase === 'undefined') {
-                showToast('Connecting to network...');
-                setTimeout(() => btnCreateRoom.click(), 300);
+                if (networkRetryCount === 0) showToast('Connecting to network...');
+                if (!scheduleNetworkRetry(createOnlineRoom)) showNetworkUnavailable();
                 return;
             }
             showToast('Please check config.js');
@@ -567,7 +604,7 @@ document.addEventListener('DOMContentLoaded', () => {
         showScreen(screenWaiting);
 
         await setupSupabaseRoom(roomCode);
-    });
+    }
 
     btnJoinRoom.addEventListener('click', () => {
         const code = inputRoomCode.value.trim().toUpperCase();
@@ -575,6 +612,7 @@ document.addEventListener('DOMContentLoaded', () => {
             showToast('Enter valid 6-character code');
             return;
         }
+        clearNetworkRetry();
         joinOnlineRoom(code);
     });
 
@@ -585,8 +623,13 @@ document.addEventListener('DOMContentLoaded', () => {
     async function joinOnlineRoom(code) {
         if (!initSupabase()) {
             if (typeof window.supabase === 'undefined') {
-                showConnectingScreen(code);
-                setTimeout(() => joinOnlineRoom(code), 300);
+                if (scheduleNetworkRetry(() => joinOnlineRoom(code))) {
+                    showConnectingScreen(code);
+                } else {
+                    showNetworkUnavailable();
+                    clearUrlRoomParam();
+                    showScreen(screenOnlineLobby);
+                }
                 return;
             }
             showToast('Please check config.js');
