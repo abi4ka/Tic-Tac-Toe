@@ -1014,16 +1014,22 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function copyText(str, msg) {
+        const failMsg = 'Could not copy. Please copy it manually.';
         if (navigator.clipboard) {
-            navigator.clipboard.writeText(str).then(() => showToast(msg));
+            navigator.clipboard.writeText(str)
+                .then(() => showToast(msg))
+                .catch(() => showToast(failMsg));
         } else {
             const el = document.createElement('textarea');
             el.value = str;
             document.body.appendChild(el);
             el.select();
-            document.execCommand('copy');
+            let copied = false;
+            try {
+                copied = document.execCommand('copy');
+            } catch (e) {}
             document.body.removeChild(el);
-            showToast(msg);
+            showToast(copied ? msg : failMsg);
         }
     }
 
