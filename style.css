@@ -215,6 +215,11 @@ body {
 
 .btn:disabled { opacity: 0.4; cursor: not-allowed; }
 
+.btn:focus-visible {
+    outline: 2px solid var(--text-primary);
+    outline-offset: 2px;
+}
+
 .btn-primary {
     background: linear-gradient(135deg, var(--color-x) 0%, #4facfe 100%);
     color: #050a14;
@@ -478,6 +483,11 @@ body {
 .cell:hover:not(.x):not(.o):not([disabled]) {
     background: rgba(255, 255, 255, 0.06);
     border-color: rgba(255, 255, 255, 0.2);
+}
+
+.cell:focus-visible {
+    outline: 2px solid var(--text-primary);
+    outline-offset: 2px;
 }
 
 /* Scaled Vector SVG Marks inside Cell */

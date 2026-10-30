@@ -721,6 +721,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 cell.innerHTML = '';
                 cell.removeAttribute('disabled');
             }
+            updateCellLabel(i);
         });
     }
 
@@ -799,10 +800,11 @@ document.addEventListener('DOMContentLoaded', () => {
         setRestartButtonState('restart', 'New Game');
         btnRestart.classList.add('hidden');
 
-        cells.forEach(cell => {
+        cells.forEach((cell, i) => {
             cell.innerHTML = '';
             cell.className = 'cell';
             cell.removeAttribute('disabled');
+            updateCellLabel(i);
         });
 
         currentTurn = startingSymbol;
@@ -841,6 +843,7 @@ document.addEventListener('DOMContentLoaded', () => {
         cell.innerHTML = symbol === 'X' ? SVG_X : SVG_O;
         cell.classList.add(symbol.toLowerCase());
         cell.setAttribute('disabled', 'true');
+        updateCellLabel(index);
 
         const winCombo = checkWin(symbol);
 
@@ -852,6 +855,13 @@ document.addEventListener('DOMContentLoaded', () => {
             currentTurn = currentTurn === 'X' ? 'O' : 'X';
             updateTurnUI();
         }
+    }
+
+    // Accessible name for screen readers, e.g. "Row 1, column 3, X"
+    function updateCellLabel(index) {
+        const row = Math.floor(index / 3) + 1;
+        const col = (index % 3) + 1;
+        cells[index].setAttribute('aria-label', `Row ${row}, column ${col}, ${boardState[index] || 'empty'}`);
     }
 
     function updateTurnUI() {
