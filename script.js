@@ -505,8 +505,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
         showConnectingScreen(code);
 
+        await setupSupabaseRoom(code);
+
+        // Arm the timeout only after setup, since leaveSupabaseRoom() clears it
+        if (!gameChannel || isOpponentConnected) return;
         clearJoinTimeout();
         joinTimeout = setTimeout(() => {
+            joinTimeout = null;
             if (myRole === 'joiner' && !isOpponentConnected) {
                 showToast('Connection timed out. Room may not exist.');
                 clearUrlRoomParam();
@@ -514,8 +519,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 showScreen(screenOnlineLobby);
             }
         }, 12000);
-
-        await setupSupabaseRoom(code);
     }
 
     function setRestartButtonState(mode, text = null) {
